@@ -14,6 +14,11 @@
 git clone https://github.com/qbitix/ubuntu-tgcontrol.git
 ```
 
+### Переход в основную директорию бота
+```bash
+cd ubuntu-tgcontrol
+```
+
 ### Установка пакетов
 ```bash
 npm i dotenv telegraf
