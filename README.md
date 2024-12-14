@@ -1,16 +1,13 @@
 # ubuntu-tgcontrol
 Ужасно простенький бот с открытым кодом
 
-Для коректной работы нужен nodejs v23.X.X
+Для коректной работы нужен [node.js](https://nodejs.org/) v23.X.X
 
-# Как запустить
-Бот работает на [node.js](https://nodejs.org/)
+## <img src="https://icon.icepanel.io/Technology/svg/Node.js.svg" width="25"/> Подготовка к запуску (Node JS)
 
 ### Для начала
 1. Переименуйте файл .env.example в .env
 2. Вставьте указанные данные (Для получения вашего id можете использовать команду /id)
-
-## <img src="https://icon.icepanel.io/Technology/svg/Node.js.svg" width="25"/> Чуть подробнее про запуск (Node JS)
 
 ### Клонирование репозитория
 ```bash
