@@ -5,10 +5,6 @@
 
 ## <img src="https://icon.icepanel.io/Technology/svg/Node.js.svg" width="25"/> Подготовка к запуску (Node JS)
 
-### Для начала
-1. Переименуйте файл .env.example в .env
-2. Вставьте указанные данные (Для получения вашего id можете использовать команду /id)
-
 ### Клонирование репозитория
 ```bash
 git clone https://github.com/qbitix/ubuntu-tgcontrol.git
