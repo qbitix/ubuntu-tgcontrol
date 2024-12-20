@@ -8,6 +8,71 @@ dotenv.config({path: './config.env'});
 
 const bot = new Telegraf(process.env.Token);
 
+const CONFIG = {
+    TRACK_CHANGE_DELAY: 2000,
+    VOLUME_STEP: 10,
+    RECONNECT_DELAY: 5000
+};
+
+function requireOwner(handler) {
+    return async (ctx) => {
+        if (ctx.from.id.toString() !== process.env.Me) return;
+        try {
+            await handler(ctx);
+        } catch (error) {
+            console.error('Error:', error);
+            await ctx.reply('Произошла ошибка при выполнении команды');
+        }
+    };
+}
+
+async function getPlayerInfo() {
+    const metadata = await new Promise((resolve, reject) => {
+        exec('playerctl metadata --format "{{ artist }} - {{ title }}"', (error, stdout) => {
+            if (error) reject(error);
+            else resolve(stdout.trim());
+        });
+    });
+
+    const status = await new Promise((resolve, reject) => {
+        exec('playerctl status', (error, stdout) => {
+            if (error) reject(error);
+            else resolve(stdout.trim());
+        });
+    });
+
+    const volume = await new Promise((resolve, reject) => {
+        exec('pactl get-sink-volume @DEFAULT_SINK@ | grep Volume | awk \'{print $5}\'', (error, stdout) => {
+            if (error) reject(error);
+            else resolve(stdout.trim());
+        });
+    });
+
+    const artUrl = await new Promise((resolve, reject) => {
+        exec('playerctl metadata mpris:artUrl', (error, stdout) => {
+            if (error) reject(error);
+            else resolve(stdout.trim());
+        });
+    });
+
+    return { metadata, status, volume, artUrl };
+}
+
+const mediaKeyboard = {
+    inline_keyboard: [
+        [
+            { text: '⏮️ Предыдущий', callback_data: 'previous' },
+            { text: '⏯️ Пауза/Воспр.', callback_data: 'playpause' },
+            { text: '⏭️ Следующий', callback_data: 'next' }
+        ],
+        [
+            { text: '🔈 Тише', callback_data: 'volumedown' },
+            { text: '🔊 Громче', callback_data: 'volumeup' },
+            { text: '🔇 Без звука', callback_data: 'mute' }
+        ]
+    ]
+};
+
 bot.command('start', (ctx) => {
     ctx.reply('Привет! Выберите нужную опцию:', Markup.keyboard([
         ['📊 Информация о системе'],
@@ -34,42 +99,11 @@ bot.hears('⏯️ Медиа управление', async (ctx) => {
             return;
         }
 
-        const metadata = await new Promise((resolve, reject) => {
-            exec('playerctl metadata --format "{{ artist }} - {{ title }}"', (error, stdout) => {
-                if (error && error.code === 1) {
-                    resolve('Нет активного плеера');
-                } else if (error) {
-                    reject(error);
-                } else {
-                    resolve(stdout.trim());
-                }
-            });
-        });
+        const { metadata, status, volume, artUrl } = await getPlayerInfo();
 
         if (metadata === 'Нет активного плеера') {
             ctx.reply(metadata);
         } else {
-            const status = await new Promise((resolve, reject) => {
-                exec('playerctl status', (error, stdout) => {
-                    if (error) reject(error);
-                    else resolve(stdout.trim());
-                });
-            });
-
-            const volume = await new Promise((resolve, reject) => {
-                exec('pactl get-sink-volume @DEFAULT_SINK@ | grep Volume | awk \'{print $5}\'', (error, stdout) => {
-                    if (error) reject(error);
-                    else resolve(stdout.trim());
-                });
-            });
-
-            const artUrl = await new Promise((resolve, reject) => {
-                exec('playerctl metadata mpris:artUrl', (error, stdout) => {
-                    if (error) reject(error);
-                    else resolve(stdout.trim());
-                });
-            });
-
             const message = `🎵 ${metadata}\n(${status})\nГромкость: ${volume}`;
             if (!artUrl) {
                 await ctx.reply(message, {
@@ -141,101 +175,30 @@ bot.hears('⏯️ Медиа управление', async (ctx) => {
     }
 });
 
-bot.action('previous', async (ctx) => {
-    if (ctx.from.id.toString() !== process.env.Me) return;
-    exec('playerctl previous', async (error) => {
-        if (error) {
-            ctx.answerCbQuery('Ошибка при выполнении команды');
-            return;
+bot.action('previous', requireOwner(async (ctx) => {
+    await exec('playerctl previous');
+    
+    setTimeout(async () => {
+        const { metadata, status, volume, artUrl } = await getPlayerInfo();
+        const message = `🎵 ${metadata}\n(${status})\nГромкость: ${volume}`;
+
+        if (!artUrl) {
+            await ctx.editMessageText(message, { reply_markup: mediaKeyboard });
+        } else {
+            const media = artUrl.startsWith('file://') ? 
+                { source: artUrl.replace('file://', '') } : 
+                artUrl;
+
+            await ctx.editMessageMedia({
+                type: 'photo',
+                media: media,
+                caption: message
+            }, { reply_markup: mediaKeyboard });
         }
-        
-        setTimeout(async () => {
-            try {
-                const metadata = await new Promise((resolve, reject) => {
-                    exec('playerctl metadata --format "{{ artist }} - {{ title }}"', (error, stdout) => {
-                        if (error) reject(error);
-                        else resolve(stdout.trim());
-                    });
-                });
 
-                const status = await new Promise((resolve, reject) => {
-                    exec('playerctl status', (error, stdout) => {
-                        if (error) reject(error);
-                        else resolve(stdout.trim());
-                    });
-                });
-
-                const volume = await new Promise((resolve, reject) => {
-                    exec('pactl get-sink-volume @DEFAULT_SINK@ | grep Volume | awk \'{print $5}\'', (error, stdout) => {
-                        if (error) reject(error);
-                        else resolve(stdout.trim());
-                    });
-                });
-
-                const artUrl = await new Promise((resolve, reject) => {
-                    exec('playerctl metadata mpris:artUrl', (error, stdout) => {
-                        if (error) reject(error);
-                        else resolve(stdout.trim());
-                    });
-                });
-
-                const message = `🎵 ${metadata}\n(${status})\nГромкость: ${volume}`;
-
-                if (!artUrl) {
-                    await ctx.editMessageText(message, {
-                        reply_markup: {
-                            inline_keyboard: [
-                                [
-                                    { text: '⏮️ Предыдущий', callback_data: 'previous' },
-                                    { text: '⏯️ Пауза/Воспр.', callback_data: 'playpause' },
-                                    { text: '⏭️ Следующий', callback_data: 'next' }
-                                ],
-                                [
-                                    { text: '🔈 Тише', callback_data: 'volumedown' },
-                                    { text: '🔊 Громче', callback_data: 'volumeup' },
-                                    { text: '🔇 Без звука', callback_data: 'mute' }
-                                ]
-                            ]
-                        }
-                    });
-                } else {
-                    const media = artUrl.startsWith('file://') ? 
-                        { source: artUrl.replace('file://', '') } : 
-                        artUrl;
-
-                    await ctx.editMessageMedia(
-                        {
-                            type: 'photo',
-                            media: media,
-                            caption: message
-                        },
-                        {
-                            reply_markup: {
-                                inline_keyboard: [
-                                    [
-                                        { text: '⏮️ Предыдущий', callback_data: 'previous' },
-                                        { text: '⏯️ Пауза/Воспр.', callback_data: 'playpause' },
-                                        { text: '⏭️ Следующий', callback_data: 'next' }
-                                    ],
-                                    [
-                                        { text: '🔈 Тише', callback_data: 'volumedown' },
-                                        { text: '🔊 Громче', callback_data: 'volumeup' },
-                                        { text: '🔇 Без звука', callback_data: 'mute' }
-                                    ]
-                                ]
-                            }
-                        }
-                    );
-                }
-
-                ctx.answerCbQuery('Переключено на предыдущий трек');
-            } catch (error) {
-                console.error('Ошибка при обновлении данных:', error);
-                ctx.reply('Произошла ошибка при обновлении данных');
-            }
-        }, 2000);
-    });
-});
+        ctx.answerCbQuery('Переключено на предыдущий трек');
+    }, 2000);
+}));
 
 bot.action('playpause', async (ctx) => {
     if (ctx.from.id.toString() !== process.env.Me) return;
@@ -246,33 +209,7 @@ bot.action('playpause', async (ctx) => {
         }
         setTimeout(async () => {
             try {
-                const metadata = await new Promise((resolve, reject) => {
-                    exec('playerctl metadata --format "{{ artist }} - {{ title }}"', (error, stdout) => {
-                        if (error) reject(error);
-                        else resolve(stdout.trim());
-                    });
-                });
-
-                const status = await new Promise((resolve, reject) => {
-                    exec('playerctl status', (error, stdout) => {
-                        if (error) reject(error);
-                        else resolve(stdout.trim());
-                    });
-                });
-
-                const volume = await new Promise((resolve, reject) => {
-                    exec('pactl get-sink-volume @DEFAULT_SINK@ | grep Volume | awk \'{print $5}\'', (error, stdout) => {
-                        if (error) reject(error);
-                        else resolve(stdout.trim());
-                    });
-                });
-
-                const artUrl = await new Promise((resolve, reject) => {
-                    exec('playerctl metadata mpris:artUrl', (error, stdout) => {
-                        if (error) reject(error);
-                        else resolve(stdout.trim());
-                    });
-                });
+                const { metadata, status, volume, artUrl } = await getPlayerInfo();
 
                 const message = `🎵 ${metadata}\n(${status})\nГромкость: ${volume}`;
 
@@ -338,33 +275,7 @@ bot.action('next', async (ctx) => {
         }
         setTimeout(async () => {
             try {
-                const metadata = await new Promise((resolve, reject) => {
-                    exec('playerctl metadata --format "{{ artist }} - {{ title }}"', (error, stdout) => {
-                        if (error) reject(error);
-                        else resolve(stdout.trim());
-                    });
-                });
-
-                const status = await new Promise((resolve, reject) => {
-                    exec('playerctl status', (error, stdout) => {
-                        if (error) reject(error);
-                        else resolve(stdout.trim());
-                    });
-                });
-
-                const volume = await new Promise((resolve, reject) => {
-                    exec('pactl get-sink-volume @DEFAULT_SINK@ | grep Volume | awk \'{print $5}\'', (error, stdout) => {
-                        if (error) reject(error);
-                        else resolve(stdout.trim());
-                    });
-                });
-
-                const artUrl = await new Promise((resolve, reject) => {
-                    exec('playerctl metadata mpris:artUrl', (error, stdout) => {
-                        if (error) reject(error);
-                        else resolve(stdout.trim());
-                    });
-                });
+                const { metadata, status, volume, artUrl } = await getPlayerInfo();
 
                 const message = `🎵 ${metadata}\n(${status})\nГромкость: ${volume}`;
 
@@ -431,26 +342,7 @@ bot.action('volumedown', async (ctx) => {
                 return;
             }
 
-            const metadata = await new Promise((resolve, reject) => {
-                exec('playerctl metadata --format "{{ artist }} - {{ title }}"', (error, stdout) => {
-                    if (error) reject(error);
-                    else resolve(stdout.trim());
-                });
-            });
-
-            const status = await new Promise((resolve, reject) => {
-                exec('playerctl status', (error, stdout) => {
-                    if (error) reject(error);
-                    else resolve(stdout.trim());
-                });
-            });
-
-            const volume = await new Promise((resolve, reject) => {
-                exec('pactl get-sink-volume @DEFAULT_SINK@ | grep Volume | awk \'{print $5}\'', (error, stdout) => {
-                    if (error) reject(error);
-                    else resolve(stdout.trim());
-                });
-            });
+            const { metadata, status, volume, artUrl } = await getPlayerInfo();
 
             const message = `🎵 ${metadata}\n(${status})\nГромкость: ${volume}`;
 
@@ -489,26 +381,7 @@ bot.action('volumeup', async (ctx) => {
                 return;
             }
 
-            const metadata = await new Promise((resolve, reject) => {
-                exec('playerctl metadata --format "{{ artist }} - {{ title }}"', (error, stdout) => {
-                    if (error) reject(error);
-                    else resolve(stdout.trim());
-                });
-            });
-
-            const status = await new Promise((resolve, reject) => {
-                exec('playerctl status', (error, stdout) => {
-                    if (error) reject(error);
-                    else resolve(stdout.trim());
-                });
-            });
-
-            const volume = await new Promise((resolve, reject) => {
-                exec('pactl get-sink-volume @DEFAULT_SINK@ | grep Volume | awk \'{print $5}\'', (error, stdout) => {
-                    if (error) reject(error);
-                    else resolve(stdout.trim());
-                });
-            });
+            const { metadata, status, volume, artUrl } = await getPlayerInfo();
 
             const message = `🎵 ${metadata}\n(${status})\nГромкость: ${volume}`;
 
@@ -546,38 +419,12 @@ bot.action('mute', async (ctx) => {
         }
 
         try {
-            const metadata = await new Promise((resolve, reject) => {
-                exec('playerctl metadata --format "{{ artist }} - {{ title }}"', (error, stdout) => {
-                    if (error) reject(error);
-                    else resolve(stdout.trim());
-                });
-            });
-
-            const status = await new Promise((resolve, reject) => {
-                exec('playerctl status', (error, stdout) => {
-                    if (error) reject(error);
-                    else resolve(stdout.trim());
-                });
-            });
+            const { metadata, status, volume, artUrl } = await getPlayerInfo();
 
             const isMuted = await new Promise((resolve, reject) => {
                 exec('pactl get-sink-mute @DEFAULT_SINK@', (error, stdout) => {
                     if (error) reject(error);
                     else resolve(stdout.includes('yes'));
-                });
-            });
-
-            const volume = await new Promise((resolve, reject) => {
-                exec('pactl get-sink-volume @DEFAULT_SINK@ | grep Volume | awk \'{print $5}\'', (error, stdout) => {
-                    if (error) reject(error);
-                    else resolve(stdout.trim());
-                });
-            });
-
-            const artUrl = await new Promise((resolve, reject) => {
-                exec('playerctl metadata mpris:artUrl', (error, stdout) => {
-                    if (error) reject(error);
-                    else resolve(stdout.trim());
                 });
             });
 
@@ -685,7 +532,7 @@ bot.command('id', (ctx) => {
 bot.hears('📊 Информация о системе', async (ctx) => {
     if (ctx.from.id.toString() !== process.env.Me) return;
     try {
-        exec('uname -a', (error, stdout, stderr) => {
+        exec('uname -a', (error, stdout, stderr) => { 
             if (error) {
                 ctx.reply('Ошибка при получении информации о системе');
                 return;
@@ -715,7 +562,7 @@ bot.hears('📊 Информация о системе', async (ctx) => {
 bot.hears('⚡ Выключить систему', async (ctx) => {
     if (ctx.from.id.toString() !== process.env.Me) return;
     try {
-        await ctx.reply('Выключение компьютера...');
+        await ctx.reply('Вы��лючение компьютера...');
         exec('sudo shutdown now', (error, stdout, stderr) => {
             if (error) {
                 ctx.reply('Ошибка при выключении: ' + error.message + '\nПопробуйте добавить пользователя в sudoers или настроить shutdown без пароля');
@@ -780,3 +627,6 @@ try {
 } catch (error) {
     console.error('Ошибка при запуске бота:', error);
 }
+
+process.once('SIGINT', () => bot.stop('SIGINT'));
+process.once('SIGTERM', () => bot.stop('SIGTERM'));
