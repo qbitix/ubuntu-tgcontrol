@@ -1,43 +1,25 @@
 # ubuntu-tgcontrol
 Ужасно простенький бот с открытым кодом
 
-Для коректной работы нужен [node.js](https://nodejs.org/) v23.X.X
 
-## <img src="https://icon.icepanel.io/Technology/svg/Node.js.svg" width="25"/> Подготовка к запуску (Node JS)
+## <img src="https://icon.icepanel.io/Technology/svg/Node.js.svg" width="25"/> Установка
 
-### Клонирование репозитория
+### Скрипт для установки
 ```bash
-git clone https://github.com/qbitix/ubuntu-tgcontrol.git
+sudo bash -c "$(curl -sL https://github.com/qbitix/ubuntu-tgcontrol/raw/main/install.sh)"
 ```
 
-### Переход в основную директорию бота
+### Для редактирования конфига
 ```bash
-cd ubuntu-tgcontrol
+sudo nano /var/lib/ubuntu-tgcontrol/.env
 ```
 
-### Установка пакетов
+### Для включения автозагрузки
 ```bash
-npm i dotenv telegraf
+sudo systemctl enable ubuntu-tgcontrol
 ```
 
-### Установка pm2
+### Для включения бота
 ```bash
-npm install -g pm2
-```
-
-## Запуск 
-### Запуск бота через pm2
-```bash
-pm2 start index.js --name "YOUR_NAME" --node-args="--no-warnings"
-```
-## Настройка автозагрузки
-
-### Сохраните конфигурацию процессов pm2
-```bash
-pm2 save
-```
-
-### Получите команду для активации автозагрузки
-```bash
-pm2 startup
+sudo systemctl start ubuntu-tgcontrol
 ```
