@@ -13,7 +13,7 @@ check_command_exists() {
 ensure_sudo() {
     if [ "$(id -u)" -ne 0 ]; then
         echo "Этот скрипт необходимо запускать с правами sudo."
-        echo "Пожалуйста, выполните: sudo ./install.sh"
+        echo 'Пожалуйста, выполните: sudo bash -c "$(curl -sL https://github.com/qbitix/ubuntu-tgcontrol/raw/main/install.sh)"'
         exit 1
     fi
 }
